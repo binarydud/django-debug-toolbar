@@ -1,2 +1,7 @@
-<h3>Profile stats</h3>
-{{content|safe}}
+{%if profile%}
+{%for node in profile %}
+
+{%endfor%}
+{%else%}
+<p><a href="?prof" title="Enable profiler">Enable profiler</a></p>
+{%endif%}
