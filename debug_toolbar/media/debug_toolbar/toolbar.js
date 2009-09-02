@@ -99,6 +99,13 @@ jQuery(function($j) {
 		$j(document).unbind('keydown.djDebug');
 		$j('.panelContent').hide();
 	});
+	$j(document).ready(function() {
+        $j("#treeTable").treeTable({
+	          clickableNodeNames: true,
+	          indent: 15
+	        }).show();
+	    
+	});
 });
 jQuery(function() {
 	jQuery.djDebug();

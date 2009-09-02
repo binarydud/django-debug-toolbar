@@ -1,0 +1,9 @@
+<tr id="{{parent_id}}" class="step{%if parents_parent_id %} child-of-{{parents_parent_id}}{% endif %}">
+    <td class="name">
+	    <span {% if not has_children %}class="function"{% endif %} title="{{node.filename}}:{{node.line_no}}">{{node.func_name}}</span>
+    </td>
+    <td class="narrow" style="width: 1%;"><span class="time">{{node.cost}}ms</span></td>
+    <td class="profile_bar" style="width: 78%;">
+        <div class="profile_bar" style="width: {{proj_width}}; ">{{proj_width}}</div>
+    </td>
+</tr>
