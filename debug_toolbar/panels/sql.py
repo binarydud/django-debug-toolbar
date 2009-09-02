@@ -1,6 +1,6 @@
 import os
 import SocketServer
-import time
+from datetime import datetime
 import traceback
 import django
 from django.conf import settings
@@ -15,6 +15,21 @@ from debug_toolbar.panels import DebugPanel
 # Figure out some paths
 django_path = os.path.realpath(os.path.dirname(django.__file__))
 socketserver_path = os.path.realpath(os.path.dirname(SocketServer.__file__))
+
+# TODO:This should be set in the toolbar loader as a default and panels should
+# get a copy of the toolbar object with access to its config dictionary
+SQL_WARNING_THRESHOLD = getattr(settings, 'DEBUG_TOOLBAR_CONFIG', {}).get('SQL_WARNING_THRESHOLD', 500)
+
+SQL_KEYWORDS = (
+    'SELECT',
+    'FROM',
+    'WHERE',
+    'INNER JOIN',
+    'LEFT OUTER JOIN',
+    'ORDER BY',
+    'HAVING',
+    'GROUP BY',
+)
 
 def tidy_stacktrace(strace):
     """
@@ -39,11 +54,12 @@ class DatabaseStatTracker(util.CursorDebugWrapper):
     in `connection.queries`.
     """
     def execute(self, sql, params=()):
-        start = time.time()
+        start = datetime.now()
         try:
             return self.cursor.execute(sql, params)
         finally:
-            stop = time.time()
+            stop = datetime.now()
+            duration = ms_from_timedelta(stop - start)
             stacktrace = tidy_stacktrace(traceback.extract_stack())
             _params = ''
             try:
@@ -53,11 +69,14 @@ class DatabaseStatTracker(util.CursorDebugWrapper):
             # We keep `sql` to maintain backwards compatibility
             self.db.queries.append({
                 'sql': self.db.ops.last_executed_query(self.cursor, sql, params),
-                'time': (stop - start) * 1000, # convert to ms
+                'duration': duration,
                 'raw_sql': sql,
                 'params': _params,
                 'hash': sha_constructor(settings.SECRET_KEY + sql + _params).hexdigest(),
                 'stacktrace': stacktrace,
+                'start_time': start,
+                'stop_time': stop,
+                'is_slow': (duration > SQL_WARNING_THRESHOLD)
             })
 util.CursorDebugWrapper = DatabaseStatTracker
 
@@ -73,22 +92,35 @@ class SQLDebugPanel(DebugPanel):
         self._offset = len(connection.queries)
         self._sql_time = 0
 
-    def title(self):
-        self._sql_time = sum(map(lambda q: float(q['time']), connection.queries))
+    def nav_title(self):
+        return 'SQL'
+
+    def nav_subtitle(self):
+        self._sql_time = sum([q['duration'] for q in connection.queries[self._offset:]])
         num_queries = len(connection.queries) - self._offset
-        return '%d SQL %s (%.2fms)' % (
+        return "%d %s in %.2fms" % (
             num_queries,
             (num_queries == 1) and 'query' or 'queries',
             self._sql_time
         )
+
+    def title(self):
+        return 'SQL Queries'
 
     def url(self):
         return ''
 
     def content(self):
         sql_queries = connection.queries[self._offset:]
+        width_ratio_tally = 0
         for query in sql_queries:
             query['sql'] = reformat_sql(query['sql'])
+            try:
+                query['width_ratio'] = (query['duration'] / self._sql_time) * 100
+            except ZeroDivisionError:
+                query['width_ratio'] = 0
+            query['start_offset'] = width_ratio_tally
+            width_ratio_tally += query['width_ratio']
 
         context = {
             'queries': sql_queries,
@@ -97,22 +129,14 @@ class SQLDebugPanel(DebugPanel):
         }
         return render_to_string('debug_toolbar/panels/sql.html', context)
 
+def ms_from_timedelta(td):
+    """
+    Given a timedelta object, returns a float representing milliseconds
+    """
+    return (td.seconds * 1000) + (td.microseconds / 1000.0)
+
 def reformat_sql(sql):
-    sql = sql.replace(',', ', ')
-    sql = sql.replace('SELECT ', 'SELECT\n\t')
-    sql = sql.replace(' FROM ', '\nFROM\n\t')
-    sql = sql.replace(' WHERE ', '\nWHERE\n\t')
-    sql = sql.replace(' INNER JOIN', '\n\tINNER JOIN')
-    sql = sql.replace(' LEFT OUTER JOIN' , '\n\tLEFT OUTER JOIN')
-    sql = sql.replace(' ORDER BY ', '\nORDER BY\n\t')
-    sql = sql.replace(' HAVING ', '\nHAVING\n\t')
-    sql = sql.replace(' GROUP BY ', '\nGROUP BY\n\t')
-    # Use Pygments to highlight SQL if it's available
-    try:
-        from pygments import highlight
-        from pygments.lexers import SqlLexer
-        from pygments.formatters import HtmlFormatter
-        sql = highlight(sql, SqlLexer(), HtmlFormatter())
-    except ImportError:
-        pass
+    for kwd in SQL_KEYWORDS:
+        sql = sql.replace(kwd, '<strong>%s</strong>' % (kwd,))
     return sql
+
