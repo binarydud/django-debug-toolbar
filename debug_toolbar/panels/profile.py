@@ -3,6 +3,7 @@ from django.template.loader import render_to_string
 import sys, tempfile, pstats
 from cStringIO import StringIO
 import logging
+from django.utils.translation import ugettext_lazy as _
 try:
     import cProfile as profile
 except:
@@ -14,7 +15,10 @@ class ProfileDebugPanel(DebugPanel):
     name = 'Profile'
     def __init__(self):
         self.profiler = None
-        
+    
+    def nav_title(self):
+        return _('Profile')
+    
     def title(self):
         return 'Profile'
 
@@ -37,7 +41,6 @@ class ProfileDebugPanel(DebugPanel):
         string = None
         if self.profiler:
             results = self.profiler.getstats()
-            logging.debug(results)
             data = buildtree(results)
             profile = [x for x in data.values() if not x.get('callers')]
             nodes = []
@@ -52,7 +55,7 @@ class ProfileDebugPanel(DebugPanel):
         
         
         
-import random, logging
+import random
 #from django.template import Library, Node, TemplateSyntaxError
 
 
