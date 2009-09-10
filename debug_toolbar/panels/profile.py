@@ -1,3 +1,4 @@
+from django.conf import settings
 from debug_toolbar.panels import DebugPanel
 from django.template.loader import render_to_string
 import sys, tempfile, pstats
@@ -148,10 +149,14 @@ def yield_work(node, depth, tottime, profile_data=None, parents_parent_id=None):
     }
     s = render_to_string('debug_toolbar/profile/render_node.html', ret)
     yield s
+    if hasattr(settings, 'DEBUG_TOOLBAR_CONFIG'):
+        depth_limit = settings.DEBUG_TOOLBAR_CONFIG.get('PROFILER_DEPTH', 5)
+    else:
+        depth_limit = 5
     if has_children:
         depth += 1
         for called_node in node["calls"]:
             called = profile_data[called_node['function']]
-            if depth > 5: continue
+            if depth >= depth_limit: continue
             for row in yield_work(called, depth, tottime, profile_data, parents_parent_id=parent_id):
                 yield row
