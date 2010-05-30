@@ -11,6 +11,8 @@ class CacheStatTracker(BaseCache):
     """A small class used to track cache calls."""
     def __init__(self, cache):
         self.cache = cache
+        if hasattr(self.cache, '_cache'):
+            self._cache = cache._cache
         self.reset()
 
     def reset(self):
